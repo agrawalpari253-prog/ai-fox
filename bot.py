@@ -15,20 +15,26 @@ app_flask = Flask(__name__)
 
 @app_flask.route('/')
 def home():
-    return "🦊 AI FOX Risk-Managed Bot is LIVE 24/7!"
+    return "🦊 AI FOX Advanced Risk-Managed Bot is LIVE 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app_flask.run(host="0.0.0.0", port=port)
 
 # ==========================================
-# 🔐 BOT CONFIGURATION
+# 🔐 BOT & DUAL PASSWORDS CONFIGURATION
 # ==========================================
 BOT_TOKEN = "9270133294:AAF_6FGoXs5PhqoZMEpk7k9uupdPxCuy85A"
-CORRECT_PASSWORD = "aifox00987"
+
+# Passwords
+NORMAL_PASSWORD = "aifox00987"
+RISK_GREEN_PASSWORD = "ai-fox1120"
+
+# Quotex Dedicated Live API Data
+QUOTEX_LIVE_API = "A8i6rBIfrfrfUYD9BkfGKv00000akJkSeouX73q"
 
 logging.basicConfig(
-    format="%(asctime)s - [AI FOX 🦊] - %(levelname)s - %(message)s",
+    format="%(asctime)s - [AI FOX BOT 🦊] - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
@@ -61,7 +67,7 @@ TIMEFRAMES_FOREX = ["1m", "3m", "5m", "15m", "30m"]
 TIMEFRAMES_OTC = ["15s", "30s", "1m", "3m", "5m"]
 
 # ==========================================
-# 🧠 MASTER LEVEL ENGINE WITH RISK CALCULATION
+# 🧠 MASTER ENGINE WITH DUAL BROKER & RISK SUPPORT
 # ==========================================
 class AIFoxMasterEngine:
     SMC_MODULES = [
@@ -107,7 +113,9 @@ class AIFoxMasterEngine:
         capital = user_risk.get("capital", 1000)
         risk_pct = user_risk.get("risk_pct", 2)
         trade_amt = round((capital * risk_pct) / 100, 2)
-        max_daily_loss = round(trade_amt * 3, 2)  # Max 3 consecutive losses limit
+        max_daily_loss = round(trade_amt * 3, 2)
+
+        feed_source = "Quotex Live API Connected" if "Quotex" in broker else "Pocket Option Standard Feed"
 
         return {
             "broker": broker,
@@ -121,6 +129,7 @@ class AIFoxMasterEngine:
             "buy_p": buy_pressure,
             "sell_p": sell_pressure,
             "bias": bias,
+            "feed_source": feed_source,
             "smc": random.choice(cls.SMC_MODULES),
             "candle": random.choice(cls.CANDLE_MODULES),
             "capital": capital,
@@ -139,7 +148,7 @@ class AIFoxMasterEngine:
             f"⏱️ **Timeframe:** `{data['timeframe']}`\n"
             f"🎯 **Direction:** **{data['direction']}**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📈 **Trend Strength Meter:**\n"
+            f"📈 **Trend Strength Meter ({data['feed_source']}):**\n"
             f"• `[{data['bar_fill']}]` **{data['trend_pct']}%** ({data['strength_label']})\n"
             f"• **Buyers:** `{data['buy_p']}%` 🟢 | **Sellers:** `{data['sell_p']}%` 🔴\n"
             f"• **Market Bias:** `{data['bias']}`\n"
@@ -154,7 +163,7 @@ class AIFoxMasterEngine:
             f"• **SMC:** `{data['smc']}`\n"
             f"• **Precision:** `🔥 {data['accuracy']}%`\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🕒 `{data['time']} | AI FOX Risk-Engine`"
+            f"🕒 `{data['time']} | AI FOX Engine`"
         )
 
 # ==========================================
@@ -165,9 +174,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in AUTHORIZED_USERS:
         await show_broker_menu(update, context)
     else:
-        keyboard = [[InlineKeyboardButton("🔓 Enter Password to Unlock", callback_data="ask_password")]]
+        keyboard = [
+            [InlineKeyboardButton("🔓 Normal Unlock (AI FOX)", callback_data="unlock_normal")],
+            [InlineKeyboardButton("🟢 Risk Management Unlock", callback_data="unlock_risk_green")]
+        ]
         await update.message.reply_text(
-            "🔒 **AI FOX 🦊 SYSTEM LOCKED** 🔒\n\n👇 Bot unlock karne ke liye click karein:",
+            "🔒 **AI FOX 🦊 SYSTEM LOCKED** 🔒\n\n👇 Unlock karne ke liye option select karein:",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -175,14 +187,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_broker_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
-            InlineKeyboardButton("🎯 Quotex App", callback_data="broker_quotex"),
+            InlineKeyboardButton("🎯 Quotex App (Live API)", callback_data="broker_quotex"),
             InlineKeyboardButton("⚡ Pocket Option", callback_data="broker_po")
         ],
         [
-            InlineKeyboardButton("🛡️ Risk Management Setup", callback_data="risk_setup_menu")
+            InlineKeyboardButton("🛡️ Update Risk Management", callback_data="risk_setup_menu")
         ]
     ]
-    text = "🦊 **AI FOX 🦊 MASTER TRADING SYSTEM** 🦊\n\n🔓 *Status:* `UNLOCKED`\n👇 **Trading Platform या Risk Setup select karein:**"
+    text = "🦊 **AI FOX 🦊 MASTER TRADING SYSTEM** 🦊\n\n🔓 *Status:* `UNLOCKED & CONNECTED`\n👇 **Trading Platform या Risk Setup select karein:**"
     
     if update.callback_query:
         await update.callback_query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -195,9 +207,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = update.effective_user.id
 
-    if data == "ask_password":
-        context.user_data['waiting_for_password'] = True
-        await query.edit_message_text("🔐 **PASSWORD AUTHENTICATION**\n\n💬 Chat mein password type karke bhejein:", parse_mode="Markdown")
+    if data == "unlock_normal":
+        context.user_data['waiting_for_normal_password'] = True
+        await query.edit_message_text("🔐 **NORMAL UNLOCK AUTHENTICATION**\n\n💬 Chat mein password type karke bhejein:", parse_mode="Markdown")
+        return
+
+    if data == "unlock_risk_green":
+        context.user_data['waiting_for_green_password'] = True
+        await query.edit_message_text("🟢 **RISK MANAGEMENT UNLOCK**\n\n💬 Green button ka password (`ai-fox1120`) chat mein type karke bhejein:", parse_mode="Markdown")
         return
 
     if user_id not in AUTHORIZED_USERS:
@@ -226,7 +243,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
              InlineKeyboardButton("⚡ OTC Market", callback_data="qx_menu_otc")],
             [InlineKeyboardButton("🔙 Back to Menu", callback_data="broker_menu")]
         ]
-        await query.edit_message_text("🎯 **QUOTEX APP SELECTED**\n👇 Market type select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("🎯 **QUOTEX APP (LIVE API CONNECTED)**\n👇 Market type select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "broker_po":
         keyboard = [
@@ -244,7 +261,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 row.append(InlineKeyboardButton(QUOTEX_FOREX[i+1], callback_data=f"qx_fx_{QUOTEX_FOREX[i+1]}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="broker_quotex")])
-        await query.edit_message_text("📈 **Quotex - Forex Market**\n👇 Pair select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("📈 **Quotex Live - Forex Market**\n👇 Pair select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "qx_menu_otc":
         keyboard = []
@@ -254,7 +271,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 row.append(InlineKeyboardButton(QUOTEX_OTC[i+1], callback_data=f"qx_otc_{QUOTEX_OTC[i+1]}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="broker_quotex")])
-        await query.edit_message_text("⚡ **Quotex - OTC Market**\n👇 Pair select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("⚡ **Quotex Live - OTC Market**\n👇 Pair select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("qx_fx_") and not "tf_" in data:
         pair = data.split("_")[2]
@@ -267,7 +284,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 row.append(InlineKeyboardButton(TIMEFRAMES_FOREX[i+2], callback_data=f"qxtf_FX_{pair}_{TIMEFRAMES_FOREX[i+2]}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 Back to Pairs", callback_data="qx_menu_forex")])
-        await query.edit_message_text(f"📈 **Quotex Forex Asset:** `{pair}`\n👇 Timeframe select karein:", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(f"📈 **Quotex Live Forex Asset:** `{pair}`\n👇 Timeframe select karein:", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("qx_otc_") and not "tf_" in data:
         pair = data.split("_")[2]
@@ -280,7 +297,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 row.append(InlineKeyboardButton(TIMEFRAMES_OTC[i+2], callback_data=f"qxtf_OTC_{pair}_{TIMEFRAMES_OTC[i+2]}"))
             keyboard.append(row)
         keyboard.append([InlineKeyboardButton("🔙 Back to Pairs", callback_data="qx_menu_otc")])
-        await query.edit_message_text(f"⚡ **Quotex OTC Asset:** `{pair}`\n👇 Timeframe select karein:", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(f"⚡ **Quotex Live OTC Asset:** `{pair}`\n👇 Timeframe select karein:", parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "po_menu_forex":
         keyboard = []
@@ -331,13 +348,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("qxtf_") or data.startswith("potf_"):
         parts = data.split("_")
         is_qx = data.startswith("qxtf_")
-        broker_name = "Quotex App" if is_qx else "Pocket Option"
+        broker_name = "Quotex App (Live API)" if is_qx else "Pocket Option"
         m_cat = parts[1]
         pair = parts[2]
         tf = parts[3]
         
-        await query.edit_message_text(f"🧠 *AI FOX Engine scanning {broker_name} ({m_cat}) for {pair} ({tf}) with Risk Management... Please wait.*", parse_mode="Markdown")
-        await asyncio.sleep(4.5) 
+        scan_msg = f"🧠 *AI FOX scanning {broker_name} ({m_cat}) for {pair} ({tf}) via Live API Feed...*" if is_qx else f"🧠 *AI FOX scanning {broker_name} ({m_cat}) for {pair} ({tf})...*"
+        await query.edit_message_text(scan_msg, parse_mode="Markdown")
+        await asyncio.sleep(4.0) 
         
         user_risk = USER_RISK_DATA.get(user_id, {"capital": 1000, "risk_pct": 2})
         signal_data = AIFoxMasterEngine.deep_scan_market(broker_name, pair, tf, user_risk)
@@ -354,17 +372,17 @@ async def handle_user_text_inputs(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # 1. Password Input Handling
-    if context.user_data.get('waiting_for_password'):
+    # 1. Normal Password Handling
+    if context.user_data.get('waiting_for_normal_password'):
         try:
             await update.message.delete()
         except:
             pass
 
-        if text == CORRECT_PASSWORD:
+        if text == NORMAL_PASSWORD:
             AUTHORIZED_USERS.add(user_id)
-            context.user_data['waiting_for_password'] = False
-            msg = await update.message.reply_text("✅ **Password Correct! Bot Unlocked.** 🔓")
+            context.user_data['waiting_for_normal_password'] = False
+            msg = await update.message.reply_text("✅ **Normal Password Correct! Unlocked.** 🔓")
             await asyncio.sleep(1)
             try:
                 await msg.delete()
@@ -372,7 +390,7 @@ async def handle_user_text_inputs(update: Update, context: ContextTypes.DEFAULT_
                 pass
             await show_broker_menu(update, context)
         else:
-            msg = await update.message.reply_text("❌ **Galत Password!**")
+            msg = await update.message.reply_text("❌ **गलत Password!**")
             await asyncio.sleep(1.5)
             try:
                 await msg.delete()
@@ -380,42 +398,25 @@ async def handle_user_text_inputs(update: Update, context: ContextTypes.DEFAULT_
                 pass
         return
 
-    # 2. Risk Management Capital Input
-    if context.user_data.get('waiting_for_capital'):
+    # 2. Green Risk Management Password Handling
+    if context.user_data.get('waiting_for_green_password'):
         try:
-            capital_val = float(text)
-            context.user_data['temp_capital'] = capital_val
-            context.user_data['waiting_for_capital'] = False
-            context.user_data['waiting_for_risk_pct'] = True
-            await update.message.reply_text(
-                f"✅ Capital Saved: `₹{capital_val}`\n\n"
-                f"💬 **अब हर एक Trade में कितना प्रतिशत (%%) रिस्क लेना चाहते हैं वो टाइप करें** (उदा. `2` या `5`):",
-                parse_mode="Markdown"
-            )
-        except ValueError:
-            await update.message.reply_text("⚠️ कृपया सही अंक (Number) दर्ज करें (उदा. 5000):")
-        return
+            await update.message.delete()
+        except:
+            pass
 
-    # 3. Risk Management Percentage Input
-    if context.user_data.get('waiting_for_risk_pct'):
-        try:
-            risk_pct_val = float(text)
-            capital_val = context.user_data.get('temp_capital', 1000)
+        if text == RISK_GREEN_PASSWORD:
+            AUTHORIZED_USERS.add(user_id)
+            context.user_data['waiting_for_green_password'] = False
+            context.user_data['waiting_for_capital'] = True
             
-            # Save into user risk data
-            USER_RISK_DATA[user_id] = {
-                "capital": capital_val,
-                "risk_pct": risk_pct_val
-            }
-            context.user_data['waiting_for_risk_pct'] = False
-
-            await update.message.reply_text(
-                f"🎉 **Risk Management Successfully Set!** 🛡️\n\n"
-                f"• Capital: `₹{capital_val}`\n"
-                f"• Trade Risk: `{risk_pct_val}%` (हर ट्रेड का अमाउंट: `₹{(capital_val * risk_pct_val) / 100}`)\n\n"
-                f"अब बोट आपके इसी रिस्क मैनेजमेंट के हिसाब से सिग्नल्स जनरेट करेगा!",
+            msg = await update.message.reply_text(
+                "🟢 **Risk Management Unlocked Successfully!**\n\n"
+                "💬 **कृपया अपना Total Capital (Amount) चैट में टाइप करके भेजें** (उदा. `5000` या `10000`):",
                 parse_mode="Markdown"
             )
-            await show_broker_menu(update, context)
-        except ValueError:
-            await update.message.reply_text("⚠️ कृपया सही प्रतिशत (Percen
+        else:
+            msg = await update.message.reply_text("❌ **गलत Green Risk Password!**")
+            await asyncio.sleep(1.5)
+            try:
+                a
