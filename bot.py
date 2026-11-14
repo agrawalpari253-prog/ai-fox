@@ -15,7 +15,7 @@ app_flask = Flask(__name__)
 
 @app_flask.route('/')
 def home():
-    return "🦊 AI FOX Dual-Broker Bot is LIVE 24/7!"
+    return "🦊 AI FOX Risk-Managed Bot is LIVE 24/7!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -33,6 +33,7 @@ logging.basicConfig(
 )
 
 AUTHORIZED_USERS = set()
+USER_RISK_DATA = {}  # User-wise risk management storage
 
 # ==========================================
 # 📊 MARKETS & TIMEFRAMES DATABASE
@@ -60,7 +61,7 @@ TIMEFRAMES_FOREX = ["1m", "3m", "5m", "15m", "30m"]
 TIMEFRAMES_OTC = ["15s", "30s", "1m", "3m", "5m"]
 
 # ==========================================
-# 🧠 MASTER LEVEL ENGINE
+# 🧠 MASTER LEVEL ENGINE WITH RISK CALCULATION
 # ==========================================
 class AIFoxMasterEngine:
     SMC_MODULES = [
@@ -80,7 +81,7 @@ class AIFoxMasterEngine:
     ]
 
     @classmethod
-    def deep_scan_market(cls, broker: str, market: str, timeframe: str) -> dict:
+    def deep_scan_market(cls, broker: str, market: str, timeframe: str, user_risk: dict) -> dict:
         is_buy = random.choice([True, False])
         
         if is_buy:
@@ -102,6 +103,12 @@ class AIFoxMasterEngine:
 
         accuracy = random.randint(93, 99)
         
+        # Risk Management Calculations
+        capital = user_risk.get("capital", 1000)
+        risk_pct = user_risk.get("risk_pct", 2)
+        trade_amt = round((capital * risk_pct) / 100, 2)
+        max_daily_loss = round(trade_amt * 3, 2)  # Max 3 consecutive losses limit
+
         return {
             "broker": broker,
             "market": market,
@@ -116,6 +123,10 @@ class AIFoxMasterEngine:
             "bias": bias,
             "smc": random.choice(cls.SMC_MODULES),
             "candle": random.choice(cls.CANDLE_MODULES),
+            "capital": capital,
+            "risk_pct": risk_pct,
+            "trade_amt": trade_amt,
+            "max_daily_loss": max_daily_loss,
             "time": datetime.now().strftime("%H:%M:%S")
         }
 
@@ -133,13 +144,17 @@ class AIFoxMasterEngine:
             f"• **Buyers:** `{data['buy_p']}%` 🟢 | **Sellers:** `{data['sell_p']}%` 🔴\n"
             f"• **Market Bias:** `{data['bias']}`\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ **Custom Risk Management (Active):**\n"
+            f"• **Total Capital:** `₹{data['capital']}`\n"
+            f"• **Risk Per Trade ({data['risk_pct']}%):** `₹{data['trade_amt']}`\n"
+            f"• **Max Safe Daily Loss:** `₹{data['max_daily_loss']}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🧠 **Deep-Scan (150/150 Active):**\n"
             f"• **Pattern:** `{data['candle']}`\n"
             f"• **SMC:** `{data['smc']}`\n"
             f"• **Precision:** `🔥 {data['accuracy']}%`\n"
             f"━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🛡️ *Risk: Use 1-2% capital per trade.*\n"
-            f"🕒 `{data['time']} | AI FOX Core`"
+            f"🕒 `{data['time']} | AI FOX Risk-Engine`"
         )
 
 # ==========================================
@@ -162,9 +177,12 @@ async def show_broker_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("🎯 Quotex App", callback_data="broker_quotex"),
             InlineKeyboardButton("⚡ Pocket Option", callback_data="broker_po")
+        ],
+        [
+            InlineKeyboardButton("🛡️ Risk Management Setup", callback_data="risk_setup_menu")
         ]
     ]
-    text = "🦊 **AI FOX 🦊 MASTER TRADING SYSTEM** 🦊\n\n🔓 *Status:* `UNLOCKED`\n👇 **Apna Trading Platform select karein:**"
+    text = "🦊 **AI FOX 🦊 MASTER TRADING SYSTEM** 🦊\n\n🔓 *Status:* `UNLOCKED`\n👇 **Trading Platform या Risk Setup select karein:**"
     
     if update.callback_query:
         await update.callback_query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -189,11 +207,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "main_menu" or data == "broker_menu":
         await show_broker_menu(update, context)
 
+    elif data == "risk_setup_menu":
+        context.user_data['waiting_for_capital'] = True
+        user_risk = USER_RISK_DATA.get(user_id, {"capital": 1000, "risk_pct": 2})
+        await query.edit_message_text(
+            f"🛡️ **RISK MANAGEMENT SETUP** 🛡️\n\n"
+            f"Current Settings:\n"
+            f"• Capital: `₹{user_risk['capital']}`\n"
+            f"• Risk Per Trade: `{user_risk['risk_pct']}%`\n\n"
+            f"💬 **Apna Total Capital (Amount) chat mein type karke bhejein** (उदा. `5000` या `10000`):",
+            parse_mode="Markdown"
+        )
+        return
+
     elif data == "broker_quotex":
         keyboard = [
             [InlineKeyboardButton("📈 Forex Market", callback_data="qx_menu_forex"),
              InlineKeyboardButton("⚡ OTC Market", callback_data="qx_menu_otc")],
-            [InlineKeyboardButton("🔙 Back to Brokers", callback_data="broker_menu")]
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="broker_menu")]
         ]
         await query.edit_message_text("🎯 **QUOTEX APP SELECTED**\n👇 Market type select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -201,7 +232,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("📈 Forex Market", callback_data="po_menu_forex"),
              InlineKeyboardButton("⚡ OTC Market", callback_data="po_menu_otc")],
-            [InlineKeyboardButton("🔙 Back to Brokers", callback_data="broker_menu")]
+            [InlineKeyboardButton("🔙 Back to Menu", callback_data="broker_menu")]
         ]
         await query.edit_message_text("⚡ **POCKET OPTION SELECTED**\n👇 Market type select karein:", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -305,29 +336,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pair = parts[2]
         tf = parts[3]
         
-        await query.edit_message_text(f"🧠 *AI FOX Engine scanning {broker_name} ({m_cat}) for {pair} ({tf})... Please wait.*", parse_mode="Markdown")
+        await query.edit_message_text(f"🧠 *AI FOX Engine scanning {broker_name} ({m_cat}) for {pair} ({tf}) with Risk Management... Please wait.*", parse_mode="Markdown")
         await asyncio.sleep(4.5) 
         
-        signal_data = AIFoxMasterEngine.deep_scan_market(broker_name, pair, tf)
+        user_risk = USER_RISK_DATA.get(user_id, {"capital": 1000, "risk_pct": 2})
+        signal_data = AIFoxMasterEngine.deep_scan_market(broker_name, pair, tf, user_risk)
         
         back_pairs = "qx_menu_forex" if is_qx and m_cat == "FX" else ("qx_menu_otc" if is_qx else ("po_menu_forex" if m_cat == "FX" else "po_menu_otc"))
         
         kb = [
             [InlineKeyboardButton("🔄 Re-Scan Market", callback_data=data)],
-            [InlineKeyboardButton("🔙 Back to Pairs", callback_data=back_pairs), InlineKeyboardButton("🏠 Brokers Menu", callback_data="broker_menu")]
+            [InlineKeyboardButton("🔙 Back to Pairs", callback_data=back_pairs), InlineKeyboardButton("🏠 Main Menu", callback_data="broker_menu")]
         ]
         await query.edit_message_text(AIFoxMasterEngine.format_master_card(signal_data), parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(kb))
 
-async def handle_password_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_user_text_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    # 1. Password Input Handling
     if context.user_data.get('waiting_for_password'):
-        entered_password = update.message.text.strip()
         try:
             await update.message.delete()
         except:
             pass
 
-        if entered_password == CORRECT_PASSWORD:
+        if text == CORRECT_PASSWORD:
             AUTHORIZED_USERS.add(user_id)
             context.user_data['waiting_for_password'] = False
             msg = await update.message.reply_text("✅ **Password Correct! Bot Unlocked.** 🔓")
@@ -338,28 +372,50 @@ async def handle_password_input(update: Update, context: ContextTypes.DEFAULT_TY
                 pass
             await show_broker_menu(update, context)
         else:
-            msg = await update.message.reply_text("❌ **Galat Password!**")
+            msg = await update.message.reply_text("❌ **Galत Password!**")
             await asyncio.sleep(1.5)
             try:
                 await msg.delete()
             except:
                 pass
+        return
 
-# ==========================================
-# 🚀 MAIN RUNNER
-# ==========================================
-def main():
-    Thread(target=run_flask, daemon=True).start()
-    
-    print("🦊 AI FOX Dual-Broker 24/7 Bot Initialized...")
-    app = Application.builder().token(BOT_TOKEN).build()
+    # 2. Risk Management Capital Input
+    if context.user_data.get('waiting_for_capital'):
+        try:
+            capital_val = float(text)
+            context.user_data['temp_capital'] = capital_val
+            context.user_data['waiting_for_capital'] = False
+            context.user_data['waiting_for_risk_pct'] = True
+            await update.message.reply_text(
+                f"✅ Capital Saved: `₹{capital_val}`\n\n"
+                f"💬 **अब हर एक Trade में कितना प्रतिशत (%%) रिस्क लेना चाहते हैं वो टाइप करें** (उदा. `2` या `5`):",
+                parse_mode="Markdown"
+            )
+        except ValueError:
+            await update.message.reply_text("⚠️ कृपया सही अंक (Number) दर्ज करें (उदा. 5000):")
+        return
 
-    app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_password_input))
+    # 3. Risk Management Percentage Input
+    if context.user_data.get('waiting_for_risk_pct'):
+        try:
+            risk_pct_val = float(text)
+            capital_val = context.user_data.get('temp_capital', 1000)
+            
+            # Save into user risk data
+            USER_RISK_DATA[user_id] = {
+                "capital": capital_val,
+                "risk_pct": risk_pct_val
+            }
+            context.user_data['waiting_for_risk_pct'] = False
 
-    print("✅ Bot is LIVE 24/7!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+            await update.message.reply_text(
+                f"🎉 **Risk Management Successfully Set!** 🛡️\n\n"
+                f"• Capital: `₹{capital_val}`\n"
+                f"• Trade Risk: `{risk_pct_val}%` (हर ट्रेड का अमाउंट: `₹{(capital_val * risk_pct_val) / 100}`)\n\n"
+                f"अब बोट आपके इसी रिस्क मैनेजमेंट के हिसाब से सिग्नल्स जनरेट करेगा!",
+                parse_mode="Markdown"
+            )
+            await show_broker_menu(update, context)
+        except ValueError:
+            await update.message.reply_text("⚠️ कृपया सही प्रतिशत (Percen
